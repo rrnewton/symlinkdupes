@@ -2,6 +2,8 @@
   [2005.01.31]
 *)
 
+(** TODO: Read back the symlink and verify that it exists before unlinking the original. *)
+
 open Set
 open Lazy
 open List
