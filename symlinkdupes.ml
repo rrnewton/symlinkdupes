@@ -20,8 +20,10 @@ module IntSet = Set.Make(Int64)
 type file = (string * Unix.LargeFile.stats)
 type entry = A of file
 	   | B of file
-type trash = Pretend | Trash | Delete 
-type checktype = SizeOnly | SizeMod | Sparsecheck | Fullcheck (* Checksum *)
+(** FillLink is uncompleted... it was going to replace symlinks with full files.
+    That's silly though, we should just repair symlinks and use a simple operation to fill them in. *)
+type linkop = Pretend | Trash | Delete | FillLink
+type checktype = NameOnly | SizeOnly | SizeMod | Sparsecheck | Fullcheck (* Checksum *)
 
 (** Trash means using the my unix "trash" command to move the file to the trash.
     Delete means using Unix unlink. *)
@@ -35,7 +37,7 @@ type checktype = SizeOnly | SizeMod | Sparsecheck | Fullcheck (* Checksum *)
 (* For now we just statically allocate this hash structure.  We make it pretty big.*)
 let thehash = Hashtbl.create 10000;;
 let actually_unlink = ref false;;
-let trash_mode = ref Pretend;;
+let link_mode = ref Pretend;;
 let check_level = ref Fullcheck;;
 let min_filesize = ref Int64.zero;;
 let verbose = ref false;;
@@ -68,7 +70,10 @@ let keys hsh =
 let rec add_tree wrap tree =
   match tree with 
       Adir (_, rest) -> fold_left (+) 0 (map (add_tree wrap) (force rest))
-    | Alink _ -> 0
+    | Alink ((name, stats, path), link) -> 
+	if !link_mode = FillLink
+	then (Hashtbl.add thehash stats.st_size (wrap (path,stats)); 1)
+	else 0
     | Afile (name, stats, path) -> 
 	if stats.st_size >= !min_filesize
 	then (Hashtbl.add thehash stats.st_size (wrap (path,stats)); 1)
@@ -101,10 +106,14 @@ let potential_matches key elst =
    checksum.  TODO! *)
 let verify_match (f1,s1) (f2,s2) = 
   (* This should always be true: *)
-  (s1.st_size = s2.st_size) &&
+  if !check_level == NameOnly 
+  then Filename.basename f1 = Filename.basename f2
+  else 
+    (s1.st_size = s2.st_size) &&
   (*  s1.st_ctime = s2.st_ctime*)
   match !check_level with
-      SizeMod -> (s1.st_mtime = s2.st_mtime)
+    | NameOnly -> failwith ""
+    | SizeMod -> (s1.st_mtime = s2.st_mtime)
     | SizeOnly -> true
 
     | Sparsecheck -> 
@@ -211,11 +220,21 @@ let verify_match (f1,s1) (f2,s2) =
 *)
 
 
+let report_match _ _ = ()
+
+let report_link (f1,s1) (f2,s2) =
+  printf "%s ->\n" f1;
+  printf "  %s\n" f2;
+  flush Pervasives.stdout;;
+
 let find_dupes () =
   concat
     (map 
        (fun key -> 
-	  filter (fun (x,y) -> verify_match x y)
+	  filter (fun (x,y) -> 
+		    if verify_match x y
+		    then (report_match x y; true)
+		    else false)
 	  (potential_matches key (Hashtbl.find_all thehash key)))
        (IntSet.elements (keys thehash)));;
 
@@ -252,10 +271,8 @@ let symlink_dupes dupes =
   in
   (* Link file1 to file2 *)
   iter (fun ((f1,s1), (f2,s2)) -> 
-	  printf "%s ->\n" f1;
-	  printf "  %s\n" f2;
-	  flush Pervasives.stdout;
-	  match !trash_mode with 
+	  report_link (f1,s1) (f2,s2);
+	  match !link_mode with 
 	      Pretend -> ()
 	    | Trash -> 
 		let cmd = ("trash " ^ Filename.quote f1) in
@@ -263,8 +280,23 @@ let symlink_dupes dupes =
 		  symlink f2 f1
 	    | Delete ->
 		unlink f1;
-		symlink f2 f1)
+		symlink f2 f1
+	    | FillLink -> failwith "FillLink not implemented"
+       )
     dupes;;
+
+
+(********************************************************************)
+
+let explode_path pth =
+  let loop s = 
+    if dirname s = basename s ||
+      basename s = ""
+    then []
+    else basename s :: loop (dirname s)
+  in List.reverse (loop pth);;
+
+(*let repair_link*)
 
 
 (********************************************************************)
@@ -279,12 +311,14 @@ let print_help () =
   print_endline "Usage: dirsize/ds <options> <path-names>";
   print_endline "options are:";
   print_endline "  -version   Show the version.";
+  print_endline "  -repair    Repair symlink mode. Not yet...";
   print_endline "  -h    Show this help message.";
   print_endline "  -v    Verbose output.";
   print_endline "  -c1   Use only filesize/modtime to determine equivalence.";
   print_endline "  -c2   Check a random subset of bytes to determine equivalence.";
   print_endline "  -c3   Check entire files to determine equivalence. (default)";
   print_endline "  -c0   DANGER.  Uses ONLY filesize to establish equivalence.";
+  print_endline "  -cn   DANGER.  Uses only filename... (Not Implemented).";
   print_endline "  -m<n> Only compare files above size n kilobytes.";
   print_endline "  -t    Use 'trash' command to delete duplicates.";
   print_endline "  -f    Use rm to force deletion of duplicates.";  
@@ -312,9 +346,10 @@ let main () =
 		  | "-c1"  -> check_level := SizeMod; false
 		  | "-c2"  -> check_level := Sparsecheck; false
 		  | "-c3"  -> check_level := Fullcheck; false
-		  | "-p"  -> trash_mode := Pretend; false
-		  | "-t"  -> trash_mode := Trash; false
-		  | "-f"  -> trash_mode := Delete; false
+		  | "-cn"  -> check_level := NameOnly; false
+		  | "-p"  -> link_mode := Pretend; false
+		  | "-t"  -> link_mode := Trash; false
+		  | "-f"  -> link_mode := Delete; false
 		  | s     -> (if String.length s > 2 && String.sub s 0 2 = "-m"
 			      then (min_filesize := 
 				    Int64.mul (Int64.of_int 1000)
