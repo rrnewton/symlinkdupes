@@ -50,10 +50,10 @@ let keys hsh =
 
 let rec add_tree wrap tree =
   match tree with 
-      Ldir (_, rest) -> fold_left (+) 0 (map (add_tree wrap) (force rest))
-    | Llink _ -> 0
-    | Lfile (name, stats) -> 
-	Hashtbl.add thehash stats.st_size (wrap (name,stats));
+      Adir (_, rest) -> fold_left (+) 0 (map (add_tree wrap) (force rest))
+    | Alink _ -> 0
+    | Afile (name, stats, path) -> 
+	Hashtbl.add thehash stats.st_size (wrap (path,stats));
 	1;;
 
 
@@ -109,23 +109,25 @@ let find_dupes () =
 (* (wrap (name,stats))*)
 
 let main () = 
-  let dira = read_ldir Sys.argv.(1)
-  and dirb = read_ldir Sys.argv.(2)
+  let dira = read_adir Sys.argv.(1)
+  and dirb = read_adir Sys.argv.(2)
 in 
-    force_ltree dira;
-    force_ltree dirb;
+    force_atree dira;
+    force_atree dirb;
     printf "Woot, what up?\n";
-    print_tree (tree_of_ltree dira);
+    print_tree (tree_of_atree dira);
     printf "And B tree\n";
-    print_tree (tree_of_ltree dirb);
+    print_tree (tree_of_atree dirb);
     printf "ADDED STUFF: %d\n" (add_tree (fun x -> A x) dira); 
     printf "ADDED MORE: %d\n" (add_tree (fun x -> B x) dirb);
     printf "Got total: %d\n" (Hashtbl.length thehash);
 (*    printf "Add files: %d\n" (add_tree 
 *)
     find_dupes (); 
+    printf "Hash contents:\n ";
+    printhash();
 ;;
 
 
 	       
-main ();;
+(*main ();;*)
