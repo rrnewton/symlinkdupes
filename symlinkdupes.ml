@@ -340,7 +340,7 @@ let print_help () =
   print_endline "  -m<n> Only compare files above size n kilobytes.";
   print_endline "  -t    Use 'trash' command to delete duplicates.";
   print_endline "  -f    Use rm to force deletion of duplicates.";  
-  print_endline "  -p    Only pretend; print the links that would (default).";
+  print_endline "  -p    Only pretend; print the links that would be deleted (default).";
 (*  print_endline "  -c   Use ANSI color.  Green and red theme.";
   print_endline "  -b   Use ANSI color.  Blue and yellow theme.";
   print_endline "  -nc  Don't use color.  Plain ASCII.";
