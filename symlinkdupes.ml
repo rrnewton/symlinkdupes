@@ -23,7 +23,7 @@ type entry = A of file
 (** FillLink is uncompleted... it was going to replace symlinks with full files.
     That's silly though, we should just repair symlinks and use a simple operation to fill them in. *)
 type linkop = Pretend | Trash | Delete | FillLink
-type checktype = NameOnly | SizeOnly | SizeMod | Sparsecheck | Fullcheck (* Checksum *)
+type checktype = NameOnly | NameAndSize | SizeOnly | SizeMod | Sparsecheck | Fullcheck (* Checksum *)
 
 (** Trash means using the my unix "trash" command to move the file to the trash.
     Delete means using Unix unlink. *)
@@ -107,7 +107,11 @@ let potential_matches key elst =
 let verify_match (f1,s1) (f2,s2) = 
   (* This should always be true: *)
   if !check_level == NameOnly 
+    (* This won't work yet because the hash table's by size. *)
   then Filename.basename f1 = Filename.basename f2
+  else if !check_level == NameAndSize 
+  then (Filename.basename f1 = Filename.basename f2 &&
+        s1.st_size = s2.st_size)
   else 
     (s1.st_size = s2.st_size) &&
   (*  s1.st_ctime = s2.st_ctime*)
@@ -318,7 +322,8 @@ let print_help () =
   print_endline "  -c2   Check a random subset of bytes to determine equivalence.";
   print_endline "  -c3   Check entire files to determine equivalence. (default)";
   print_endline "  -c0   DANGER.  Uses ONLY filesize to establish equivalence.";
-  print_endline "  -cn   DANGER.  Uses only filename... (Not Implemented).";
+  print_endline "  -cn   Uses filename and file size.";
+  print_endline "  -cN   DANGER.  Uses only filename... (Not Implemented).";
   print_endline "  -m<n> Only compare files above size n kilobytes.";
   print_endline "  -t    Use 'trash' command to delete duplicates.";
   print_endline "  -f    Use rm to force deletion of duplicates.";  
@@ -346,7 +351,8 @@ let main () =
 		  | "-c1"  -> check_level := SizeMod; false
 		  | "-c2"  -> check_level := Sparsecheck; false
 		  | "-c3"  -> check_level := Fullcheck; false
-		  | "-cn"  -> check_level := NameOnly; false
+		  | "-cn"  -> check_level := NameAndSize; false
+(*		  | "-cN"  -> check_level := NameOnly; false*)
 		  | "-p"  -> link_mode := Pretend; false
 		  | "-t"  -> link_mode := Trash; false
 		  | "-f"  -> link_mode := Delete; false
