@@ -4,6 +4,8 @@
 
 (** TODO: Read back the symlink and verify that it exists before unlinking the original. *)
 
+(** TODO: Need to also make sure that we don't try to link one location two destinations.*)
+
 open Set
 open Lazy
 open List
