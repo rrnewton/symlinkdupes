@@ -12,7 +12,7 @@ open Unix.LargeFile
 open Rutils
 (*open Hashtbl*)
 
-let version = "0.1"
+let version = "0.2.1"
 
 (****************************************)
 module IntSet = Set.Make(Int64)
@@ -41,6 +41,7 @@ let link_mode = ref Pretend;;
 let check_level = ref Fullcheck;;
 let min_filesize = ref Int64.zero;;
 let verbose = ref false;;
+let quiet = ref false;;
 
 let show_entry = function
   | A (name,stats) -> sprintf "A %s %Ld" name stats.st_size
@@ -50,6 +51,14 @@ let printhash () =
 		  printf " %Ld : %s \n" k (show_entry x);)
     thehash;;
 
+let print_progress = 
+  let counter = ref 0 in
+    (fun () ->
+       if (not !quiet) then
+       if !counter >= 500
+       then (counter := !counter - 500;
+	     print_char '.';
+	     Pervasives.flush Pervasives.stdout));;
 
 let product ls1 ls2 = 
   let pair x y = (x,y) in
@@ -72,11 +81,13 @@ let rec add_tree wrap tree =
       Adir (_, rest) -> fold_left (+) 0 (map (add_tree wrap) (force rest))
     | Alink ((name, stats, path), link) -> 
 	if !link_mode = FillLink
-	then (Hashtbl.add thehash stats.st_size (wrap (path,stats)); 1)
+	then (Hashtbl.add thehash stats.st_size (wrap (path,stats)); 
+	      print_progress (); 1)
 	else 0
     | Afile (name, stats, path) -> 
 	if stats.st_size >= !min_filesize
-	then (Hashtbl.add thehash stats.st_size (wrap (path,stats)); 1)
+	then (Hashtbl.add thehash stats.st_size (wrap (path,stats)); 
+	      print_progress (); 1)
 	else 0;;
 
 (** This takes a list of entries matching a particular key.  It
@@ -117,6 +128,7 @@ let verify_match (f1,s1) (f2,s2) =
   (*  s1.st_ctime = s2.st_ctime*)
   match !check_level with
     | NameOnly -> failwith ""
+    | NameAndSize -> failwith ""
     | SizeMod -> (s1.st_mtime = s2.st_mtime)
     | SizeOnly -> true
 
@@ -247,8 +259,8 @@ let load_dirs a b =
   let dira = read_adir a
   and dirb = read_adir b
   in 
-    force_atree dira;
-    force_atree dirb;
+(*    force_atree dira;*)
+(*    force_atree dirb;*)
     let a_added = add_tree (fun x -> A x) dira 
     and b_added = add_tree (fun x -> B x) dirb in
       if !verbose then       
@@ -291,7 +303,7 @@ let symlink_dupes dupes =
 
 
 (********************************************************************)
-
+(*
 let explode_path pth =
   let loop s = 
     if dirname s = basename s ||
@@ -299,7 +311,7 @@ let explode_path pth =
     then []
     else basename s :: loop (dirname s)
   in List.reverse (loop pth);;
-
+*)
 (*let repair_link*)
 
 
@@ -312,12 +324,13 @@ let print_version () =
   exit 0;;
 
 let print_help () = 
-  print_endline "Usage: dirsize/ds <options> <path-names>";
+  print_endline "Usage: symlinkdupes <sourcepath> <destpath>";
   print_endline "options are:";
   print_endline "  -version   Show the version.";
   print_endline "  -repair    Repair symlink mode. Not yet...";
   print_endline "  -h    Show this help message.";
   print_endline "  -v    Verbose output.";
+  print_endline "  -q    Quiet.  No progress dots.  Still lists the links.";
   print_endline "  -c1   Use only filesize/modtime to determine equivalence.";
   print_endline "  -c2   Check a random subset of bytes to determine equivalence.";
   print_endline "  -c3   Check entire files to determine equivalence. (default)";
@@ -347,6 +360,7 @@ let main () =
 		  | "-h"  -> print_help (); exit 0;
 		  | "-version"  -> print_version (); exit 0
 		  | "-v"   -> verbose := true; false
+		  | "-q"   -> quiet := true; false
 		  | "-c0"  -> check_level := SizeOnly; false
 		  | "-c1"  -> check_level := SizeMod; false
 		  | "-c2"  -> check_level := Sparsecheck; false

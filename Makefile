@@ -6,3 +6,5 @@ bc:
 nc:
 	ocamlopt unix.cmxa dirtree.cmxa rutils.cmxa  symlinkdupes.ml
 
+#install:
+#	cp a.out 
