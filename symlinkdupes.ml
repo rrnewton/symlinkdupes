@@ -1,7 +1,5 @@
 (**
   [2005.01.31]
-
-
 *)
 
 
@@ -23,7 +21,15 @@ type entry = A of file
 	   | B of file
 
 (* For now we just statically allocate this hash structure.  We make it pretty big.*)
-let thehash = Hashtbl.create 10000
+let thehash = Hashtbl.create 10000;;
+
+let show_entry = function
+  | A (name,stats) -> sprintf "A %s %Ld" name stats.st_size
+  | B (name,stats) -> sprintf "B %s %Ld" name stats.st_size;;
+let printhash () =
+  Hashtbl.iter (fun k x -> 
+		  printf " %Ld : %s \n" k (show_entry x);)
+    thehash;;
 
 
 let product ls1 ls2 = 
@@ -51,7 +57,9 @@ let rec add_tree wrap tree =
 	1;;
 
 
-(** This takes a list *)
+(** This takes a list of entries matching a particular key.  It
+  returns a list of all A-B pairings that might represent potential
+  matches. *)
 (*val potential_matches : entry list -> (file,file) list*)
 (* All entries in the entry list will have size equivalent to the key. *)
 let potential_matches key elst =
@@ -62,13 +70,17 @@ let potential_matches key elst =
 	    | B (n,_) -> "B_"^n^"_"^ Int64.to_string key)
        elst);
   printf "\n";
-  let alst = filter (function A _ -> true | _ -> false) elst 
-  and blst = filter (function B _ -> true | _ -> false) elst in
-  let asizes = fold_left (fun set (A (name,stat))  -> 
-			    IntSet.add stat.st_size set)
+  let alst = RList.filter_some (map (function A x -> Some x | _ -> None) elst) 
+  and blst = RList.filter_some (map (function B x -> Some x | _ -> None) elst) in
+    product alst blst;;
+    
+(*  let asizes = fold_left (fun set -> function 
+			      (A (name,stat)) -> IntSet.add stat.st_size set
+			    | (B _) -> raise (Failure "should not happen"))
 		 IntSet.empty alst
-  and bsizes = fold_left (fun set (B (name,stat)) -> 
-			    IntSet.add stat.st_size set)
+  and bsizes = fold_left (fun set -> function
+			      (B (name,stat)) -> IntSet.add stat.st_size set
+			    | (A _) -> raise (Failure "should not happen"))
 		 IntSet.empty blst 
   in
     (* do we have any files exactly the same size? *)
@@ -78,11 +90,13 @@ let potential_matches key elst =
       (IntSet.is_empty (IntSet.inter asizes bsizes));
    
     map (fun e1 -> map
-	   (fun e2 -> (e1,e2)) blst) alst;;
+	   (fun e2 -> (e1,e2)) blst) alst;;*)
+    
+
 
 let find_dupes () =
   IntSet.iter (fun key -> 
-		 potential_matches key (Hashtbl.find_all thehash key))
+		 ignore (potential_matches key (Hashtbl.find_all thehash key)))
     (keys thehash);;
 
 
