@@ -37,6 +37,7 @@ let thehash = Hashtbl.create 10000;;
 let actually_unlink = ref false;;
 let trash_mode = ref Pretend;;
 let check_level = ref Fullcheck;;
+let min_filesize = ref Int64.zero;;
 let verbose = ref false;;
 
 let show_entry = function
@@ -69,9 +70,9 @@ let rec add_tree wrap tree =
       Adir (_, rest) -> fold_left (+) 0 (map (add_tree wrap) (force rest))
     | Alink _ -> 0
     | Afile (name, stats, path) -> 
-	Hashtbl.add thehash stats.st_size (wrap (path,stats));
-	1;;
-
+	if stats.st_size >= !min_filesize
+	then (Hashtbl.add thehash stats.st_size (wrap (path,stats)); 1)
+	else 0;;
 
 (** This takes a list of entries matching a particular key.  It
   returns a list of all A-B pairings that might represent potential
@@ -277,16 +278,17 @@ let print_version () =
 let print_help () = 
   print_endline "Usage: dirsize/ds <options> <path-names>";
   print_endline "options are:";
-  print_endline "  -h   Show this help message.";
   print_endline "  -version   Show the version.";
-  print_endline "  -v   Verbose output.";
-  print_endline "  -c1  Use only filesize/modtime to determine equivalence.";
-  print_endline "  -c2  Check a random subset of bytes to determine equivalence.";
-  print_endline "  -c3  Check entire files to determine equivalence. (default)";
-  print_endline "  -c0  DANGER.  Uses ONLY filesize to establish equivalence.";
-  print_endline "  -t   Use 'trash' command to delete duplicates.";
-  print_endline "  -f   Use rm to force deletion of duplicates.";  
-  print_endline "  -p   Only pretend; print the links that would (default).";
+  print_endline "  -h    Show this help message.";
+  print_endline "  -v    Verbose output.";
+  print_endline "  -c1   Use only filesize/modtime to determine equivalence.";
+  print_endline "  -c2   Check a random subset of bytes to determine equivalence.";
+  print_endline "  -c3   Check entire files to determine equivalence. (default)";
+  print_endline "  -c0   DANGER.  Uses ONLY filesize to establish equivalence.";
+  print_endline "  -m<n> Only compare files above size n kilobytes.";
+  print_endline "  -t    Use 'trash' command to delete duplicates.";
+  print_endline "  -f    Use rm to force deletion of duplicates.";  
+  print_endline "  -p    Only pretend; print the links that would (default).";
 (*  print_endline "  -c   Use ANSI color.  Green and red theme.";
   print_endline "  -b   Use ANSI color.  Blue and yellow theme.";
   print_endline "  -nc  Don't use color.  Plain ASCII.";
@@ -313,10 +315,15 @@ let main () =
 		  | "-p"  -> trash_mode := Pretend; false
 		  | "-t"  -> trash_mode := Trash; false
 		  | "-f"  -> trash_mode := Delete; false
-		  | _     -> true)
+		  | s     -> (if String.length s > 2 && String.sub s 0 2 = "-m"
+			      then (min_filesize := 
+				    Int64.mul (Int64.of_int 1000)
+				      (Int64.of_string (String.sub s 2 (String.length s - 2)));
+			            false)
+			      else true))
 	       (List.tl (Array.to_list Sys.argv))
   in 
-    if length args < 2 
+    if length args != 2 
     then print_help ()
     else 
       begin
