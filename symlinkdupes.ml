@@ -12,7 +12,7 @@ open Unix.LargeFile
 open Rutils
 (*open Hashtbl*)
 
-let version = "0.2.1"
+let version = "0.2.2"
 
 (****************************************)
 module IntSet = Set.Make(Int64)
