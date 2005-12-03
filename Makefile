@@ -11,7 +11,7 @@ nc:
 #	cp a.out 
 
 install:
-	dirname `which ocamlc` | cp $(TARGET) -
+	dirname `which ocamlc` | xargs -i cp $(TARGET) {}/
 
 clean: cleanup
 	rm -f *.cmxa *.cma *.a  debug $(TARGET)
